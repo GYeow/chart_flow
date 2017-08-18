@@ -21,7 +21,6 @@
 </template>
 
 <script>
-    import $ from 'jquery'
     export default {
         name: 'menuTree',
         data () {
@@ -30,7 +29,7 @@
             }
         },
         methods: {
-            fetchData: function() {
+            fetchData() {
                 var that = this,
                     url = '/data/treeMenu';
                 that.$http.get(url).then(function(res) {
@@ -42,11 +41,11 @@
                     console.info('fail');
                 });
             },
-            nodeMousedown: function(e) {
+            nodeMousedown(e) {
                 this.$emit('dragingNode', e); // 移动
             }
         },
-        created: function() {
+        created() {
             this.fetchData();
         },
     }

@@ -5,7 +5,7 @@
             <menuTree @dragingNode="dragingNodeController"></menuTree>
         </div>
         <div class="float-left container canvas-container">
-            <canvasContent></canvasContent>
+            <canvasContent ref="svgMethod"></canvasContent>
         </div>
 
         <!--<nodeDetail></nodeDetail>-->
@@ -22,7 +22,6 @@
     import menuTree from './components/tree/Tree.vue'
     import canvasContent from '@/components/content/Content.vue'
     import nodeDetail from '@/components/detail/Detail.vue'
-    import $ from 'jquery'
 
     export default {
         name: 'app',
@@ -39,7 +38,7 @@
         },
         methods: {
             // 管理移动菜单节点
-            dragingNodeController: function (e) {
+            dragingNodeController(e) {
                 var _x = e.clientX,
                     _y = e.clientY,
                     _tar = e.target;
@@ -47,30 +46,37 @@
                 this.dragingNodeDis = [_x - _tar.offsetLeft, _y - _tar.offsetTop]; //计算距离差
 
                 this.setDragingNodePos(_x, _y); //先设置虚拟DOM的位置
-                debugger;
 
                 this.dragingNodeName = e.target.innerText;
             },
             // 开始移动
-            startDragingNode: function (e) {
-                console.log('move');
+            startDragingNode(e) {
                 this.setDragingNodePos(e.clientX, e.clientY);
             },
             // 结束移动
-            stopDragingNode: function () {
+            stopDragingNode() {
                 if (!this.dragingNodeName) return;
-                this.dragingNodeName = null;
 
-                console.log('up');
+                var _svg = document.getElementById('svgWrap'),
+                    _nodeDOM = document.getElementById('dragingNode');
+
+                var dis = [_nodeDOM.offsetLeft - _svg.offsetLeft, _nodeDOM.offsetTop - _svg.offsetTop],
+                    center = [_nodeDOM.offsetWidth / 2 + dis[0], _nodeDOM.offsetHeight / 2 + dis[1]];
+
+                // 拖动至画布内
+                if (Math.max(0, Math.min(center[0], _svg.offsetWidth)) && Math.max(0, Math.min(center[0], _svg.offsetHeight))){
+                    this.$refs.svgMethod.createNode(this.dragingNodeName, dis);
+                }
+
+                this.dragingNodeName = null;
             },
-            setDragingNodePos: function (x, y) {
+            setDragingNodePos(x, y) {
 //                TODO
 //                var _app = document.getElementById('app'),
 //                _style = document.getElementById('dragingNode').style;
 //                // 考虑初始距离差
 //                _style.left = x - this.dragingNodeDis[0] + _app.offsetLeft + 'px';
 //                _style.top = y - this.dragingNodeDis[1] + _app.offsetTop + 'px';
-
 
                 var _style = document.getElementById('dragingNode').style;
                 _style.left = x + 'px';

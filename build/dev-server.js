@@ -23,8 +23,6 @@ var proxyTable = config.dev.proxyTable
 var app = express()
 var compiler = webpack(webpackConfig)
 
-
-
 // 添加路由
 var treeManuData = require('../src/json/tree-menu.json');
 var treeMenuRoute = express.Router();
