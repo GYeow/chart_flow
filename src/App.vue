@@ -1,7 +1,8 @@
 <template>
-    <div id="app" @mousemove.stop.prevent="movingNodeName?startMovingNode($event):null" @mouseup.stop.prevent="stopMovingNode">
+    <div id="app" @mousemove.stop.prevent="dragingNodeName?startDragingNode($event):null"
+         @mouseup.stop.prevent="stopDragingNode">
         <div class="float-left container tree-container ">
-            <menuTree @movingNode="movingNodeController"></menuTree>
+            <menuTree @dragingNode="dragingNodeController"></menuTree>
         </div>
         <div class="float-left container canvas-container">
             <canvasContent></canvasContent>
@@ -9,9 +10,9 @@
 
         <!--<nodeDetail></nodeDetail>-->
 
-        <div id="MovingNode" :class="movingNodeFlag && movingNodeName ? 'inline-block' : 'hide'" class="moving-node-container">
-            <div class="moving-node-wrap">
-                <span>{{ movingNodeName }}</span>
+        <div id="dragingNode" :class="dragingNodeName ? 'inline-block' : 'hide'" class="draging-node-container">
+            <div class="draging-node-wrap">
+                <span>{{ dragingNodeName }}</span>
             </div>
         </div>
     </div>
@@ -27,9 +28,8 @@
         name: 'app',
         data () {
             return {
-                movingNodeFlag: false,
-                movingNodeName: null,
-                movingNodePos: [0, 0],
+                dragingNodeName: null, // 正在移动的节点名称
+                dragingNodeDis: [0, 0] // 移动的鼠标坐标与初始DOM之间的距离差[x, y]
             }
         },
         components: {
@@ -39,28 +39,42 @@
         },
         methods: {
             // 管理移动菜单节点
-            movingNodeController: function (e) {
+            dragingNodeController: function (e) {
+                var _x = e.clientX,
+                    _y = e.clientY,
+                    _tar = e.target;
+
+                this.dragingNodeDis = [_x - _tar.offsetLeft, _y - _tar.offsetTop]; //计算距离差
+
+                this.setDragingNodePos(_x, _y); //先设置虚拟DOM的位置
                 debugger;
-                this.setMovingNodePos();
-                this.movingNodeName = e.target.innerText;
+
+                this.dragingNodeName = e.target.innerText;
             },
             // 开始移动
-            startMovingNode: function (e) {
-                this.movingNodeFlag = true;
+            startDragingNode: function (e) {
                 console.log('move');
-                this.setMovingNodePos(e.clientX, e.clientY);
+                this.setDragingNodePos(e.clientX, e.clientY);
             },
             // 结束移动
-            stopMovingNode: function () {
-                if (!this.movingNodeName) return;
-                this.movingNodeName = null;
-                console.log('up');
+            stopDragingNode: function () {
+                if (!this.dragingNodeName) return;
+                this.dragingNodeName = null;
 
+                console.log('up');
             },
-            setMovingNodePos: function (left, top) {
-                var _style = document.getElementById('MovingNode').style;
-                _style.left = left + 'px';
-                _style.top = top + 'px';
+            setDragingNodePos: function (x, y) {
+//                TODO
+//                var _app = document.getElementById('app'),
+//                _style = document.getElementById('dragingNode').style;
+//                // 考虑初始距离差
+//                _style.left = x - this.dragingNodeDis[0] + _app.offsetLeft + 'px';
+//                _style.top = y - this.dragingNodeDis[1] + _app.offsetTop + 'px';
+
+
+                var _style = document.getElementById('dragingNode').style;
+                _style.left = x + 'px';
+                _style.top = y + 'px';
             }
         }
     }
@@ -80,6 +94,9 @@
     }
     .hide {
         display: none;
+    }
+    .relative {
+        position: relative;
     }
     .icon-arrow-down {
         border: 5px solid transparent;
@@ -116,10 +133,10 @@
         width: 85%;
         border: 1px solid black;
     }
-    .moving-node-container {
+    .draging-node-container {
         position: absolute;
     }
-    .moving-node-wrap {
+    .draging-node-wrap {
         padding:5px 15px;
         border: 1px solid #222;
     }

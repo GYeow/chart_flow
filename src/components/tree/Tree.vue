@@ -2,7 +2,8 @@
     <h2 v-if="!treeData">NO DATA</h2>
     <div v-else class="tree-wrap">
         <details v-for="item in treeData" open>
-            <summary @mousedown.stop.prevent="nodeMousedown">{{ item.name }}</summary>
+            <!--<summary @mousedown.stop.prevent="nodeMousedown">{{ item.name }}</summary>-->
+            <summary>{{ item.name }}</summary>
             <table border="0" cellspacing="0" cellpadding="0">
                 <tbody>
                     <tr v-for="node in item.children">
@@ -42,7 +43,7 @@
                 });
             },
             nodeMousedown: function(e) {
-                this.$emit('movingNode', e); // 移动
+                this.$emit('dragingNode', e); // 移动
             }
         },
         created: function() {
