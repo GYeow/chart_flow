@@ -33,6 +33,16 @@ treeMenuRoute.get('/treeMenu',function(req, res){
     })
 })
 app.use('/data', treeMenuRoute);
+
+var nodeInfoData = require('../src/json/node-info.json');
+var nodeInfoRoute = express.Router();
+nodeInfoRoute.get('/nodeInfo',function(req, res){
+    res.json({
+        errno:0,//错误码
+        data: nodeInfoData//具体数据
+    })
+})
+app.use('/data', nodeInfoRoute);
 // 添加路由结束
 
 var devMiddleware = require('webpack-dev-middleware')(compiler, {

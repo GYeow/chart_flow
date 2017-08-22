@@ -2,12 +2,11 @@
     <h2 v-if="!treeData">NO DATA</h2>
     <div v-else class="tree-wrap">
         <details v-for="item in treeData" open>
-            <!--<summary @mousedown.stop.prevent="nodeMousedown">{{ item.name }}</summary>-->
             <summary>{{ item.name }}</summary>
             <table border="0" cellspacing="0" cellpadding="0">
                 <tbody>
                     <tr v-for="node in item.children">
-                        <td class="tree-node-td" @mousedown.stop.prevent="nodeMousedown">
+                        <td class="tree-node-td" :data-id="node.id" @mousedown.stop.prevent="nodeMousedown">
                             <span class="tree-node-label-wrapper">
                                 <span class="tree-node-icon icon-data"></span>
                                 <span class="tree-node-label">{{ node.name }}</span>
@@ -114,7 +113,7 @@
         line-height: 28px;
     }
     .tree-node-td {
-        cursor: pointer;
+        cursor: all-scroll;
     }
 
 </style>

@@ -1,18 +1,18 @@
 <template>
-    <div id="app" @mousemove.stop.prevent="dragingNodeName?startDragingNode($event):null"
+    <div id="app" @mousemove.stop.prevent="dragingNode?startDragingNode($event):null"
          @mouseup.stop.prevent="stopDragingNode">
-        <div class="float-left container tree-container ">
+        <aside class="float-left container tree-container ">
             <menuTree @dragingNode="dragingNodeController"></menuTree>
-        </div>
+        </aside>
         <div class="float-left container canvas-container">
             <canvasContent ref="svgMethod"></canvasContent>
         </div>
 
         <!--<nodeDetail></nodeDetail>-->
 
-        <div id="dragingNode" :class="dragingNodeName ? 'inline-block' : 'hide'" class="draging-node-container">
+        <div id="dragingNode" :class="dragingNode ? 'inline-block' : 'hide'" class="draging-node-container">
             <div class="draging-node-wrap">
-                <span>{{ dragingNodeName }}</span>
+                <span>{{ dragingNode && dragingNode.name }}</span>
             </div>
         </div>
     </div>
@@ -23,11 +23,13 @@
     import canvasContent from '@/components/content/Content.vue'
     import nodeDetail from '@/components/detail/Detail.vue'
 
+    import $ from 'jquery'
+
     export default {
         name: 'app',
         data () {
             return {
-                dragingNodeName: null, // 正在移动的节点名称
+                dragingNode: null, // 正在移动的节点名称
                 dragingNodeDis: [0, 0] // 移动的鼠标坐标与初始DOM之间的距离差[x, y]
             }
         },
@@ -47,7 +49,11 @@
 
                 this.setDragingNodePos(_x, _y); //先设置虚拟DOM的位置
 
-                this.dragingNodeName = e.target.innerText;
+                var _td = $(_tar).is('td') ? $(_tar) : $(_tar).parents('td');
+                this.dragingNode = {
+                    id: _td.attr('data-id'),
+                    name: e.target.innerText
+                };
             },
             // 开始移动
             startDragingNode(e) {
@@ -55,7 +61,7 @@
             },
             // 结束移动
             stopDragingNode() {
-                if (!this.dragingNodeName) return;
+                if (!this.dragingNode) return;
 
                 var _svg = document.getElementById('svgWrap'),
                     _nodeDOM = document.getElementById('dragingNode');
@@ -65,10 +71,10 @@
 
                 // 拖动至画布内
                 if (Math.max(0, Math.min(center[0], _svg.offsetWidth)) && Math.max(0, Math.min(center[0], _svg.offsetHeight))){
-                    this.$refs.svgMethod.createNode(this.dragingNodeName, dis);
+                    this.$refs.svgMethod.getNodeInfo(this.dragingNode, dis);
                 }
 
-                this.dragingNodeName = null;
+                this.dragingNode = null;
             },
             setDragingNodePos(x, y) {
 //                TODO
