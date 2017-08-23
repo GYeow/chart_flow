@@ -118,7 +118,7 @@
         border: 5px solid transparent;
         border-left-color: #999;
     }
-    div.container {
+    .container {
         display: inline-flex;
         height: 100%;
     }
@@ -131,8 +131,8 @@
         -moz-osx-font-smoothing: grayscale;
         text-align: center;
         color: #2c3e50;
-        margin-top: 20px;
         padding: 5px;
+        padding-top: 20px;
         height: calc(100% - 30px);
     }
     .tree-container {
@@ -140,6 +140,7 @@
         margin-right: 5px;
         padding-right: 5px;
         border-right: 1px solid #CCC;
+        overflow: auto;
     }
     .canvas-container {
         width: 85%;

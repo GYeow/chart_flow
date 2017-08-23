@@ -1,30 +1,52 @@
 <template>
     <div id="svgWrap" :style="svgWrap">
         <svg width="100%" height="100%">
-            <!--<g v-for="item in nodes"  :style="{transform: `translate(${margin.left}px, ${margin.top}px)`}">-->
             <g class="svg-viewport">
-                <g v-for="item in nodes" style="font-size: 20px;cursor: all-scroll;">
-                    <foreignObject :data-id="item.id" v-drag class="node" :x="item.x" :y="item.y" width="130" height="30">
-                        <body xmlns="http://www.w3.org/1999/xhtml">
-                            <div :style="nodeWrap">
-                                <span>{{ item.name }}</span>
+                <!--links-->
+                <g>
+                    <g v-for="(val, key) in links" class="pane-cell pane-link">
+                        <span>{{key}}:{{val.index}}</span>
+                        <path class="connector-wrap" d="M 126 64 Q 126 94 159 92.5 T 192 121"></path>
+                        <path class="connector" d="M 126 64 Q 126 94 159 92.5 T 192 121"></path>
+                        <path class="source-marker"></path>
+                        <path class="target-marker"></path>
+                        <rect class="comment-bg" width="" height="" transform=""></rect>
+                        <text class="comment" y="" transform=""></text>
+                    </g>
+                </g>
+                <!--nodes-->
+                <g>
+                    <g v-for="(val, key) in nodes">
+                        <foreignObject :data-id="key" @mousedown.stop.prevent="draggingCtrl" class="node"
+                                       :x="val.x" :y="val.y" width="130" height="30">
+                            <body xmlns="http://www.w3.org/1999/xhtml">
+                            <div class="pane-node-content"
+                                 :class="{'is-connectable': linkingNodeId && linkingNodeId!=key && !val.source}">
+                                <span>{{ val.name }}</span>
                                 <div class="pane-port-list in">
-                                    <div v-for="input in item.input" class="pane-port-wrap" style="width: 50%;">
-                                        <div class="pane-port">
+                                    <div v-for="inputId in val.inputPorts" class="pane-port-wrap"
+                                         :style="'width: '+ 100/(val.input+1) + '%;'">
+                                        <div class="pane-port in"
+                                             :class="{'is-connectable': linkingNodeId && linkingNodeId!=key && !val.source}"
+                                             :data-id="inputId">
                                             <span class="port-magnet"></span>
                                         </div>
                                     </div>
                                 </div>
                                 <div class="pane-port-list out">
-                                    <div v-for="output in item.output" class="pane-port-wrap" style="width: 50%;">
-                                        <div class="pane-port">
+                                    <div v-for="outputId in val.outputPorts" class="pane-port-wrap"
+                                         :style="'width: '+ 100/(val.output+1) + '%;'">
+                                        <div class="pane-port out"
+                                             :class="{'is-connecting': linkingPortId ==outputId}"
+                                             :data-id="outputId">
                                             <span class="port-magnet"></span>
                                         </div>
                                     </div>
                                 </div>
                             </div>
-                        </body>
-                    </foreignObject>
+                            </body>
+                        </foreignObject>
+                    </g>
                 </g>
             </g>
         </svg>
@@ -38,23 +60,18 @@
         name: 'canvasContent',
         data () {
             return {
-                nodes: [],
+                linkingNodeId: '', //正在连线的节点id
+                linkingPortId: '', //正在连线的接口id
+                nodes: {},
+                links: {},
                 svgWrap: {
                     width: '100%',
                     height: '100%'
-                },
-                nodeWrap: {
-                    width: '100%',
-                    height: '100%',
-                    border: '1px solid gray'
                 }
             }
         },
         methods: {
-            createNode(nodeInfo) {
-                debugger;
-                this.nodes.push(nodeInfo);
-            },
+            // 获取输入输出个数等信息
             getNodeInfo(node, position) {
                 var that = this,
                     url = '/data/nodeInfo';
@@ -73,31 +90,84 @@
                     // 这里是处理错误的回调
                     console.info('fail');
                 });
-            }
-        },
-        directives: {
-            drag(el) {
-                el.onmousedown = function(e){
-                    e.stopPropagation();
-                    e.preventDefault();
-
-                    var _doc = document.getElementById('svgWrap'),
-                        maxX = _doc.offsetWidth - el.getAttribute('width'),
-                        maxY = _doc.offsetHeight - el.getAttribute('height');
-
-                    var _dis = [e.offsetX, e.offsetY]; // 考虑初始距离差
-
-                    _doc.onmousemove = function(ev){
-                        if (ev.target.tagName !='svg') return;
-
-                        el.setAttribute('y', Math.min(Math.max(0, ev.offsetY - _dis[1]), maxY));
-                        el.setAttribute('x', Math.min(Math.max(0, ev.offsetX - _dis[0]), maxX));
-                    };
-                    _doc.onmouseup = function(){
-                        this.onmousemove=null;
-                        this.onmouseup=null;
-                    };
+            },
+            draggingCtrl(e) {
+                var $tar = $(e.target),
+                    $panePort = $tar.hasClass('pane-port out') ? $tar : $tar.parents('.pane-port.out');
+                if ($panePort.length) this.linkingNodes(e, $panePort); // 连线
+                else this.draggingNode(e); // 移动节点位置
+            },
+            // 拖拽节点
+            draggingNode(e) {
+                var $ele = e.target.tagName == 'foreignObject' ? $(e.target) : $(e.target).parents('foreignObject'),
+                    _doc = document.getElementById('svgWrap'),
+                    maxX = _doc.offsetWidth - $ele.attr('width'),
+                    maxY = _doc.offsetHeight - $ele.attr('height');
+                console.log('down')
+                var _dis = [e.clientX - $ele.attr('x'), e.clientY - $ele.attr('y')]; // 考虑初始距离差
+                _doc.onmousemove = function(ev) {
+                    console.log('move')
+                    ev.stopPropagation();
+                    $ele.attr('y', Math.min(Math.max(0, ev.clientY - _dis[1]), maxY))
+                        .attr('x', Math.min(Math.max(0, ev.clientX - _dis[0]), maxX));
                 };
+                _doc.onmouseup = function() {
+                    console.log('up');
+                    this.onmousemove=null;
+                    this.onmouseup=null;
+                };
+            },
+            // 连接节点
+            linkingNodes(e, $panePort) {
+                var that = this;
+                that.linkingPortId = $panePort.data('id');
+                that.linkingNodeId = ('' + that.linkingPortId).slice(0, -2);
+
+                var offset = $panePort.offset(),
+                    svgOffset = $panePort.closest('svg').offset();
+                this.creatLink([offset.left - svgOffset.left, offset.top - svgOffset.top]); // mousedown时绘制连线
+
+                var _doc = document.getElementById('svgWrap');
+                _doc.onmousemove = function(ev) {
+                    console.log('linking');
+                    ev.stopPropagation();
+                };
+                _doc.onmouseup = function() {
+                    console.log('link-end');
+
+                    this.onmousemove=null;
+                    this.onmouseup=null;
+
+                    that.linkingPortId = '';
+                    that.linkingNodeId = '';
+                };
+            },
+            // 新建节点至画布
+            createNode(nodeInfo) {
+                var index;
+                do {
+                    index = this.getRandomIndex();
+                } while (!!this.nodes[index])
+
+                nodeInfo.index = index;
+
+                // 根据输入、输出个数生成相应的接口id
+                nodeInfo.inputPorts = [];
+                nodeInfo.outputPorts = [];
+                for (let i = 0, inputNum = nodeInfo.input; i < inputNum + nodeInfo.output; i++) {
+                    if (i < inputNum) nodeInfo.inputPorts[i] = index + ('0' + i).slice(-2);
+                    else nodeInfo.outputPorts[i - inputNum] = index + ('0' + i).slice(-2);
+                }
+                this.$set(this.nodes, index, nodeInfo); //添加至本地节点列表
+            },
+            // 新建连线至画布
+            creatLink(pos) {
+                console.log('create link')
+            },
+            removeLink(id) {},
+            // 画布中节点对象数据的key值
+            getRandomIndex() {
+                return Math.floor(Math.random() * 1e4);
             }
         }
     }
@@ -118,6 +188,25 @@
         float: left;
         height: 1px;
     }
+    .pane-node-content {
+        width: 180px;
+        height: 30px;
+        background-color: rgba(255,255,255,.9);
+        border: 1px solid #289DE9;
+        border-radius: 15px;
+        font-size: 16px;
+        line-height: 28px;
+        -webkit-transition: background-color .2s;
+        transition: background-color .2s;
+        cursor: pointer;
+    }
+    .pane-node-content:hover,
+    .pane-node.selected .pane-node-content {
+        background-color: rgba(227,244,255,.9);
+    }
+    .pane-node-content.is-connectable {
+        border-color: #39CA74;
+    }
     .pane-port {
         width: 10px;
         height: 10px;
@@ -128,6 +217,11 @@
         background-color: #fff;
         -webkit-transition: background-color .2s;
         transition: background-color .2s;
+        cursor: crosshair;
+    }
+    .pane-port-list.out .pane-port.is-connecting,
+    .pane-port-list.out .pane-port:hover {
+        background-color: grey;
     }
     .pane-port .port-magnet {
         float: left;
@@ -136,5 +230,59 @@
         margin-top: -6px;
         margin-left: -6px;
         background-color: transparent;
+    }
+    .pane-port-list.in .pane-port.is-connectable .port-magnet {
+        float: left;
+        width: 40px;
+        height: 40px;
+        margin-top: -16px;
+        margin-left: -16px;
+        background-color: transparent;
+        border-radius: 50%;
+    }
+    .pane-port-list.in .pane-port.is-connectable .port-magnet:before {
+        float: left;
+        width: 20px;
+        height: 20px;
+        margin-left: 10px;
+        margin-top: 10px;
+        box-sizing: content-box;
+        border-radius: 50%;
+        background-color: rgba(57,202,116,.6);
+        content: ' ';
+    }
+    .pane-port-list.in .pane-port.is-connectable .port-magnet:after {
+        float: left;
+        clear: both;
+        width: 10px;
+        height: 10px;
+        margin-top: -15px;
+        margin-left: 15px;
+        box-sizing: border-box;
+        border: 1px solid #39CA74;
+        border-radius: 50%;
+        background-color: #FFF;
+        content: ' ';
+    }
+    .pane-port-list.in .pane-port.is-connectable .port-magnet.is-adsorbed:before {
+        width: 28px;
+        height: 28px;
+        margin-top: 6px;
+        margin-left: 6px;
+    }
+    .pane-port-list.in .pane-port.is-connectable .port-magnet.is-adsorbed:after {
+        margin-top: -19px;
+    }
+    .pane-link .connector-wrap,
+    .pane-link-connecting .connector-wrap {
+        fill: none;
+        stroke: rgba(255,255,255,0);
+        stroke-width: 15px;
+    }
+    .pane-link .connector,
+    .pane-link-connecting .connector {
+        fill: none;
+        stroke: grey;
+        stroke-width: 1px;
     }
 </style>
