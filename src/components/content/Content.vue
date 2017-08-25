@@ -21,24 +21,24 @@
                                        :x="val.x" :y="val.y" width="180" height="30">
                             <body xmlns="http://www.w3.org/1999/xhtml">
                             <div class="pane-node-content"
-                                 :class="{'is-connectable': linkingNodeId && linkingNodeId!=key && !val.source}">
+                                 :class="{'is-connectable': linkingNodeId && linkingNodeId!=key && val.connectable}">
                                 <span>{{ val.name }}</span>
                                 <div class="pane-port-list in">
-                                    <div v-for="inputId in val.inputPorts" class="pane-port-wrap"
+                                    <div v-for="(value, inputId) in val.inputPorts" class="pane-port-wrap"
                                          :style="'width: '+ 100/(val.input+1) + '%;'">
                                         <div class="pane-port in"
-                                             :class="{'is-connectable': linkingNodeId && linkingNodeId!=key && !val.source,
-                                                        'is-connected': val.source}"
+                                             :class="{'is-connectable': linkingNodeId && linkingNodeId!=key && !value.startId,
+                                                        'is-connected': value.startId}"
                                              :data-id="inputId">
                                             <span class="port-magnet"></span>
                                         </div>
                                     </div>
                                 </div>
                                 <div class="pane-port-list out">
-                                    <div v-for="outputId in val.outputPorts" class="pane-port-wrap"
+                                    <div v-for="(value, outputId) in val.outputPorts" class="pane-port-wrap"
                                          :style="'width: '+ 100/(val.output+1) + '%;'">
                                         <div class="pane-port out"
-                                             :class="{'is-connecting': linkingPortId ==outputId}"
+                                             :class="{'is-connecting': linkingPortId==outputId}"
                                              :data-id="outputId">
                                             <span class="port-magnet"></span>
                                         </div>
@@ -106,18 +106,78 @@
             },
             // 拖拽节点
             draggingNode(e) {
-                var $ele = e.target.tagName == 'foreignObject' ? $(e.target) : $(e.target).parents('foreignObject'),
-                    _doc = document.getElementById('svgWrap'),
-                    maxX = _doc.offsetWidth - $ele.attr('width'),
-                    maxY = _doc.offsetHeight - $ele.attr('height');
+                let that = this,
+                    $ele = e.target.tagName == 'foreignObject' ? $(e.target) : $(e.target).parents('foreignObject'),
+                    _doc = document.getElementById('svgWrap');
+
+                let nodeId = $ele.attr('data-id'),
+                    nodeInfo = that.nodes[nodeId],
+                    notAlone = !!that.linksDir[nodeId];
+
                 console.log('down-node')
-                var _dis = [e.clientX - $ele.attr('x'), e.clientY - $ele.attr('y')]; // 考虑初始距离差
+
+                // 减少鼠标移动时的计算量
+                // 存储与当前节点相关连线的linkId
+                let relatedLinks = [];
+                if (notAlone) {
+                    for (let relatedNodeId in that.linksDir[nodeId]) {
+                        if (!relatedNodeId) continue;
+
+                        let linkIdArr = that.linksDir[nodeId][relatedNodeId];
+
+                        for (let i in linkIdArr) {
+                            relatedLinks.push({
+                                linkId: linkIdArr[i],
+                                isStart: ('' + that.links[linkIdArr[i]].startId).slice(0, -2) == nodeId // 当前节点是否是连线的起始节点
+                            });
+                        }
+                    }
+                }
+                // 用于计算鼠标移动时与初始位置的偏差
+                var initX = nodeInfo.x, initY = nodeInfo.y, // 初始节点坐标
+                    clientX = e.clientX, clientY = e.clientY, //初始鼠标坐标
+                    maxX = _doc.offsetWidth - $ele.attr('width'), // 禁止拖拽出边界
+                    maxY = _doc.offsetHeight - $ele.attr('height');
+
                 _doc.onmousemove = function(ev) {
                     console.log('moving-node')
                     ev.stopPropagation();
-                    $ele.attr('y', Math.min(Math.max(0, ev.clientY - _dis[1]), maxY))
-                        .attr('x', Math.min(Math.max(0, ev.clientX - _dis[0]), maxX));
+
+                    let deltaX = Math.min(Math.max(0, ev.clientX - clientX + initX), maxX) - initX,
+                        deltaY = Math.min(Math.max(0, ev.clientY - clientY + initY), maxY) - initY;
+                    nodeInfo.x += deltaX;
+                    nodeInfo.y += deltaY;
+
+//                    nodeInfo.x = Math.min(Math.max(0, ev.clientX - _dis[0]), maxX);
+//                    nodeInfo.y = Math.min(Math.max(0, ev.clientY - _dis[1]), maxY);
+
+                    if (notAlone) {
+//                        TODO 移动
+                        for (let i in relatedLinks) {
+                            let linkInfo = relatedLinks[i],
+                                linkId =  linkInfo.linkId,
+                                newLinkInfo = {
+                                    id: linkId
+                                },
+                                initPos = !!linkInfo.isStart ? that.links[linkId].start : that.links[linkId].end;
+
+                            initPos[0] += deltaX;
+                            initPos[1] += deltaY;
+                            if (linkInfo.isStart) newLinkInfo.start = initPos;
+                            else newLinkInfo.end = initPos;
+
+                            that.updateLink(newLinkInfo);
+
+                        }
+                    }
+
+                    clientX = ev.clientX;
+                    clientY = ev.clientY;
+                    initX = nodeInfo.x;
+                    initY = nodeInfo.y;
+
                 };
+
                 _doc.onmouseup = function() {
                     console.log('up-node');
                     this.onmousemove=null;
@@ -129,12 +189,12 @@
              * @param {[Object]}  e          [鼠标事件]
              * @param {[Object]}  $panePort  [输出接口的jQuery对象]
              */
-            linkingNodes(e, $panePort) {
-                var that = this;
-                that.linkingPortId = $panePort.data('id');
+            linkingNodes(e, panePort) {
+                let that = this,
+                    $panePort = panePort;
+                that.linkingPortId = $panePort.attr('data-id');
                 that.linkingNodeId = ('' + that.linkingPortId).slice(0, -2);
-
-                var offset = $panePort.offset(),
+                let offset = $panePort.offset(),
                     svgOffset = $panePort.closest('svg').offset(),
                     _dis = [offset.left + 5 - svgOffset.left, offset.top + 5 - svgOffset.top], // 初始距离差即为连线起点
                     _doc = document.getElementById('svgWrap'),
@@ -150,14 +210,28 @@
                     that.updateLink({
                         end: [ev.clientX - svgOffset.left, ev.clientY - svgOffset.top]
                     });
-
                 };
-                _doc.onmouseup = function() {
+                _doc.onmouseup = function(e) {
                     console.log('link-end');
 
                     this.onmousemove=null;
                     this.onmouseup=null;
 
+                    let $tar = $(e.target),
+                        $endPort = $tar.parent(),
+                        endOffset = $endPort.offset(),
+                        isConnected = $tar.hasClass('port-magnet') && $endPort.hasClass('is-connectable');
+
+                    // 修正连线终点位置 并 添加连线终止接口ID
+                    if (isConnected) {
+                        that.updateLink({
+                            end: [endOffset.left + 5 - svgOffset.left, endOffset.top + 5 - svgOffset.top],
+                            endId: $endPort.attr('data-id')
+                        });
+                    }
+
+                    // 根据是否连接到另一节点的接口 添加字典项 / 从画布中删除连线
+                    that.updateLinkDir(!isConnected);
                     that.linkingPortId = '';
                     that.linkingNodeId = '';
                     that.linkingLinkId = '';
@@ -168,28 +242,43 @@
              * @param {[Object]}  nodeInfo    [节点信息]
              */
             createNode(nodeInfo) {
-                var index = this.getRandomIndex(true);
+                let index = this.getRandomIndex(true);
 
-                nodeInfo.index = index;
+                $.extend(nodeInfo, {
+                    index: index,
+                    connectable: true, //是否还有未连接的输入接口
+                    sourceId: '',
+                    targetId: '',
+                    inputPorts : {},
+                    outputPorts: {},
+                    relatedNodes: {} // 有直接或间接关系的节点，用于禁止产生循环
+                },true);
 
                 // 根据输入、输出个数生成相应的接口id
-                nodeInfo.inputPorts = [];
-                nodeInfo.outputPorts = [];
                 for (let i = 0, inputNum = nodeInfo.input; i < inputNum + nodeInfo.output; i++) {
-                    if (i < inputNum) nodeInfo.inputPorts[i] = index + ('0' + i).slice(-2);
-                    else nodeInfo.outputPorts[i - inputNum] = index + ('0' + i).slice(-2);
+
+                    let targetObj = i < inputNum ? nodeInfo.inputPorts : nodeInfo.outputPorts;
+
+                    targetObj[index + ('0' + i).slice(-2)] = i < inputNum ? {startId: ''} : {endId: ''};
+
+                    targetObj[index + ('0' + i).slice(-2)].text = '';
                 }
                 this.$set(this.nodes, index, nodeInfo); //添加至本地节点列表
             },
             /**
              * 新建连线至画布
              * @param {[Array]}  pos    [起点坐标]
+             * @param {[String]} portId [起点接口id, 默认为linkingPortId]
              */
-            creatLink(pos) {
+            creatLink(pos, portId) {
                 console.log('create-link');
-                var linkInfo = this.getBezierCurve(pos, pos),
-                    index = this.getRandomIndex(false);
+                let linkInfo = this.getBezierCurve(pos, pos),
+                    index = this.getRandomIndex(false),
+                    _portId = portId || this.linkingPortId;
                 this.linkingLinkId = index;
+
+                linkInfo.startId = _portId; //起始接口id
+                linkInfo.endId = '';
 
                 this.$set(this.links, index, linkInfo); //添加至本地连线列表
             },
@@ -200,7 +289,10 @@
             updateLink(opt) {
                 if (!opt) return;
 
-                let newLinkInfo = this.links[this.linkingLinkId];
+                let linkId = opt.id || this.linkingLinkId,
+                    newLinkInfo = this.links[linkId];
+
+                if (!newLinkInfo) return;
 
                 $.extend(newLinkInfo, opt, true);
 
@@ -232,8 +324,58 @@
                 return {
                     start: start,
                     end: end,
-                    path: ['M', x1, y1, 'Q', x1, 30 + y1, (x1 + x2) / 2, (y1 + y2) / 2, 'T', x2, y2].join(' ')
+                    path: ['M', x1, y1, 'Q', x1, 30 + (y1 - y2 > 0) *20 + y1, (x1 + x2) / 2, (y1 + y2) / 2, 'T', x2, y2].join(' ')
                 };
+            },
+            /**
+             * 更新字典项便于查找连线
+             * @param {[Boolean]}  isDel    [添加为false; 删除为true; 默认为添加]
+             * @param {[String]}   linkId   [连线id; 默认为linkingLinkId]
+             */
+            updateLinkDir(isDel, linkId) {
+                let _isDel = isDel || false,
+                    _linkId = linkId || this.linkingLinkId;
+
+                if (_isDel) {
+                    delete this.links[_linkId]; // 从画布中删除连线
+                    return;
+                }
+
+                // 添加至字典项
+                let linkInfo = this.links[_linkId],
+                    newDir = {},
+                    sourceId = ('' + linkInfo.startId).slice(0, -2), //连线的起始节点Id
+                    targetId = ('' + linkInfo.endId).slice(0, -2); //连线的结束节点Id
+
+                $.extend(newDir, this.linksDir, true);
+
+                newDir[sourceId] = newDir[sourceId] || {};
+                newDir[targetId] = newDir[targetId] || {};
+
+                newDir[sourceId][targetId] = newDir[sourceId][targetId] || [];
+                newDir[targetId][sourceId] = newDir[targetId][sourceId]  || [];
+
+                newDir[sourceId][targetId].push(_linkId);
+                newDir[targetId][sourceId].push(_linkId);
+
+                let targetNode = this.nodes[targetId];
+
+                this.$set(this.linksDir, sourceId, newDir[sourceId]); //更新本地连线数据
+                this.$set(this.linksDir, targetId, newDir[targetId]);
+                this.nodes[sourceId].outputPorts[linkInfo.startId].endId = linkInfo.endId;
+                targetNode.inputPorts[linkInfo.endId].startId = linkInfo.startId;
+
+                // 同步目标节点的connectable属性
+                let connectable = false;
+
+                for (let port in targetNode.inputPorts) {
+                    if (port && targetNode.inputPorts[port] && !targetNode.inputPorts[port].startId) {
+                        connectable = true;
+                        break;
+                    }
+                }
+
+                targetNode.connectable = connectable;
             }
         }
     }
@@ -283,6 +425,8 @@
         background-color: #fff;
         -webkit-transition: background-color .2s;
         transition: background-color .2s;
+    }
+    .pane-port.out {
         cursor: crosshair;
     }
     .pane-port-list.out .pane-port.is-connecting,
@@ -298,8 +442,9 @@
         background-color: transparent;
     }
     .pane-port-list.in .pane-port.is-connected {
-        width: 0;
+        width: 2px;
         height: 0;
+        margin-right: -3px;
         border-style: solid;
         border-width: 5px 4px 0;
         border-color: grey transparent transparent;
@@ -369,4 +514,18 @@
         stroke: #CCC;
         stroke-dasharray: 3;
     }
+    .pane-link-connecting.focused .connector,
+    .pane-link-connecting:hover .connector,
+    .pane-link.focused .connector,
+    .pane-link:hover .connector {
+        stroke: rgba(128,128,128,.6);
+        stroke-width: 4px;
+    }
 </style>
+
+
+<!--<g class="pane-link pane-link-connecting">-->
+    <!--<path class="connector" d="M -84 -61 Q -84 -31 -111.99864959716797 -48.5 T -139.99729919433594 -36"></path>-->
+    <!--<path class="source-marker"></path>-->
+    <!--<path class="target-marker" d="M 5 0 L 0 3.6327126400268037 L 5 7.265425280053607 Z" transform="translate(-143.63,-31) scale(1,1) rotate(-90)"></path>-->
+<!--</g>-->
