@@ -1,6 +1,6 @@
 <template>
     <div id="svgWrap" :style="svgWrap">
-        <svg :style="svgWrap">
+        <svg :style="svgWrap" @keyup.delete="deleteCtrl">
             <g class="svg-viewport">
                 <!--links-->
                 <g>
@@ -18,8 +18,10 @@
                 </g>
                 <!--nodes-->
                 <g>
-                    <g v-for="(val, key) in nodes">
-                        <foreignObject :data-id="key" @mousedown.stop.prevent="draggingCtrl" class="node"
+                    <g v-for="(val, key) in nodes" class="pane-cell pane-node"
+                       :class="{'selected': selectedNodes[key]}">
+                        <foreignObject class="node" :data-id="key"
+                                       @mousedown.stop.prevent="draggingCtrl"
                                        :x="val.x" :y="val.y" width="180" height="30">
                             <body xmlns="http://www.w3.org/1999/xhtml">
                             <div class="pane-node-content"
@@ -67,6 +69,8 @@
                 linkingPortId: '', //正在连线的接口id
                 linkingLinkId: '', //正在连线的连线id
                 relatedNodes: {}, //直接或间接输出为linkingNode的节点(禁止连接)
+                selectedNodes: {}, //选中的节点
+                focusLink: '', //选中的连线
                 nodes: {},
                 links: {},
                 linksDir: {}, //link哈希表
@@ -76,7 +80,16 @@
                 }
             }
         },
+        created() {
+            let that = this;
+
+            document.onkeyup = function (key) {
+                if(key.keyCode != 8) return;
+                that.deleteCtrl();
+            }
+        },
         methods: {
+
             /**
              * 获取输入输出个数等信息
              * @param {[Object]}  node    [节点信息]
@@ -101,6 +114,9 @@
                     console.info('fail');
                 });
             },
+            /**
+             * 管理拖拽事件
+             */
             draggingCtrl(e) {
                 var $tar = $(e.target),
                     $panePort = $tar.hasClass('pane-port out') ? $tar : $tar.parents('.pane-port.out');
@@ -176,16 +192,22 @@
                     initY = nodeInfo.y;
                 };
 
-                _doc.onmouseup = function() {
+                _doc.onmouseup = function(event) {
                     console.log('up-node');
                     this.onmousemove=null;
                     this.onmouseup=null;
+
+                    // 点击节点后节点高亮显示
+                    if (event.clientX == e.clientX && event.clientY == e.clientY) {
+                        that.selectedNodes = {};
+                        that.$set(that.selectedNodes, nodeId, true);
+                    }
                 };
             },
             /**
              * 连接节点
              * @param {[Object]}  e          [鼠标事件]
-             * @param {[Object]}  $panePort  [输出接口的jQuery对象]
+             * @param {[Object]}  $panePort  [输出接口的jQuery对象]s
              */
             linkingNodes(e, panePort) {
                 let that = this,
@@ -241,6 +263,13 @@
                 };
             },
             /**
+             * 管理删除事件
+             */
+            deleteCtrl() {
+                if ($.isEmptyObject(this.selectedNodes) && !this.focusLink) return;
+                this.deleteNodes(Object.keys(this.selectedNodes));
+            },
+            /**
              * 新建节点至画布
              * @param {[Object]}  nodeInfo    [节点信息]
              */
@@ -286,6 +315,31 @@
                 this.$set(this.links, index, linkInfo); //添加至本地连线列表
             },
             /**
+             * 删除指定节点及与其相关的连线
+             * @param {[Array]}     nodes   [待删除的节点id集合]
+             */
+            deleteNodes(nodes) {
+                if (!nodes || !nodes.length) return;
+
+                for (let i in nodes) {
+                    let node = nodes[i];
+
+                    // 删除连线
+                    if (this.linksDir[node]) {
+                        let links = this.getRelatedLinkId(node);
+
+                        if (links && links.length) {
+                            for (let j in links) {
+                                this.deleteLink(links[j]);
+                            }
+                        }
+                    }
+
+//                    delete this.nodes[node]; //删除节点
+                    this.$delete(this.nodes, node); //删除节点
+                }
+            },
+            /**
              * 更新连线位置
              * @param {[Object]} opt   [需更新的连线信息，若未传连线id则默认为linkingNodeId]
              */
@@ -304,7 +358,33 @@
 
 //                this.$set(this.links, linkId, newLinkInfo); //更新本地连线数据
             },
-            removeLink(id) {},
+            /**
+             * 删除指定连线
+             * @param {[String]} linkId   [需删除的连线id]
+             */
+            deleteLink(id) {
+                let link = this.links[id];
+                if (!id || !link) return;
+
+                let sourceId = ('' + link.startId).slice(0, -2),
+                    targetId = ('' + link.endId).slice(0, -2);
+
+                // 从linksDir中删除
+                if (this.linksDir[sourceId] && Object.keys(this.linksDir[sourceId]).length <= 1) this.$delete(this.linksDir, sourceId);
+                else this.$delete(this.linksDir[sourceId], targetId);
+
+                if (this.linksDir[targetId] && Object.keys(this.linksDir[targetId]).length <= 1) this.$delete(this.linksDir, targetId);
+                else this.$delete(this.linksDir[targetId], sourceId);
+
+                // 删除节点中的接口信息
+                this.nodes[sourceId].outputPorts[link.startId].endId = '';
+                this.nodes[targetId].inputPorts[link.endId].startId = '';
+
+                this.nodes[targetId].connectable = true;
+
+                // 删除连线
+                delete this.links[id];
+            },
             /**
              * 设置画布中 节点/连线数据 的key值
              * @param {[Boolean]}  isNode    [true: 节点; false:连线]
@@ -368,17 +448,43 @@
                 this.nodes[sourceId].outputPorts[linkInfo.startId].endId = linkInfo.endId;
                 targetNode.inputPorts[linkInfo.endId].startId = linkInfo.startId;
 
-                // 同步目标节点的connectable属性
-                let connectable = false;
+                targetNode.connectable = this.updateConnectable(targetNode);
+            },
+            /**
+             * 更新节点的connectable属性
+             * @param {[Object]}  nodeInfo    [待更新的节点信息]
+             */
+            updateConnectable(nodeInfo) {
+                let node = nodeInfo,
+                    connectable = false;
 
-                for (let port in targetNode.inputPorts) {
-                    if (port && targetNode.inputPorts[port] && !targetNode.inputPorts[port].startId) {
+                for (let port in node.inputPorts) {
+                    if (port && node.inputPorts[port] && !node.inputPorts[port].startId) {
                         connectable = true;
                         break;
                     }
                 }
 
-                targetNode.connectable = connectable;
+                return connectable;
+            },
+
+            /**
+             * 查找与指定id节点相关的所有连线id
+             * @param {[String]}   id       [待查找的节点ID]
+             * @return {[Array]}   links    [与指定id节点相关的连线id集合]
+             */
+            getRelatedLinkId(id) {
+                let linksInfo = this.linksDir[id];
+
+                if (!linksInfo || !Object.keys(linksInfo).length) return [];
+
+                let links = []; //与指定id节点相关的连线
+
+                for (let keys in linksInfo) {
+                    Array.prototype.push.apply(links, linksInfo[keys])
+                }
+
+                return links;
             },
             /**
              * 查找指定id节点的父级节点
@@ -386,15 +492,9 @@
              * @return {[Object]}  nodes    [指定id节点的父级节点集合]
              */
             getSourceId(id) {
-                let linksInfo = this.linksDir[id];
+                let links = this.getRelatedLinkId(id);
 
-                if (!linksInfo || !Object.keys(linksInfo).length) return {};
-
-                let links = []; //与指定id节点相关的连线
-
-                for (let keys in linksInfo) {
-                    Array.prototype.push.apply(links, linksInfo[keys])
-                }
+                if (!links.length) return {};
 
                 let nodes = {}; //指定id节点的父级节点
                 for (let i in links) {
